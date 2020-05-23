@@ -255,6 +255,44 @@ namespace Cottle.Benchmark.Inputs
                     return () => template.Render(context);
                 };
             });
+
+            // Render template with Stubble
+            yield return new Input<Func<Func<Func<string>>>>(nameof(Stubble), () =>
+            {
+                const string source = @"
+<ul id='products'>
+  {{#products}}
+    <li>
+      <h2>{{name}}</h2>
+      <p>{{description}} - Only {{price}}$</p>
+    </li>
+  {{/products}}
+</ul>";
+
+                // Similar to Mustachio, Stubble doesn't provide efficient render-time function calls so input data are
+                // pre-rendered in model, introducing a bias in favor of Stubble in benchmark results.
+                var context = new Dictionary<string, object>
+                {
+                    ["products"] = CompareEngine.Products.Select(p => new Dictionary<string, object>
+                    {
+                        ["description"] = p.Description.Substring(0, Math.Min(p.Description.Length, 15)),
+                        ["name"] = p.Name, ["price"] = p.Price.ToString("f1", CultureInfo.GetCultureInfo("en-US"))
+                    }).ToArray()
+                };
+
+                // FIXME: switching to compilation renderer doesn't work (doesn't find variables anymore)
+                //var stubble = new StubbleCompilationBuilder().Build();
+                var stubble = new Stubble.Core.Builders.StubbleBuilder().Build();
+
+                return () =>
+                {
+                    //var template = stubble.Compile<Dictionary<string, object>>(source);
+                    stubble.Render(source, context);
+
+                    //return () => template(context);
+                    return () => stubble.Render(source, context);
+                };
+            });
         }
 
         private static readonly IReadOnlyList<Product> Products = Enumerable.Range(0, 5).Select(i => new Product
