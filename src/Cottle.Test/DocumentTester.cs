@@ -285,6 +285,16 @@ namespace Cottle.Test
         }
 
         [Test]
+        public void Render_StatementDefine()
+        {
+            var result = AssertOutput("{define var}", string.Empty);
+
+            Assert.That(result.Reports,
+                Has.One.Matches<DocumentReport>(r =>
+                    r.Severity == DocumentSeverity.Notice && r.Message.Contains("define")));
+        }
+
+        [Test]
         [TestCase("expression", "{3}", "3")]
         [TestCase("mixed", "A{'B'}C", "ABC")]
         [TestCase("number", "1", "1")]
@@ -475,7 +485,7 @@ namespace Cottle.Test
 
         protected abstract DocumentResult CreateDocument(TextReader template, DocumentConfiguration configuration);
 
-        protected void AssertOutput(string source, DocumentConfiguration configuration, IContext context,
+        protected DocumentResult AssertOutput(string source, DocumentConfiguration configuration, IContext context,
             string expected)
         {
             using (var template = new StringReader(source))
@@ -484,12 +494,14 @@ namespace Cottle.Test
                 var output = result.DocumentOrThrow.Render(context);
 
                 Assert.That(output, Is.EqualTo(expected), "Invalid rendered output");
+
+                return result;
             }
         }
 
-        protected void AssertOutput(string source, string expected)
+        protected DocumentResult AssertOutput(string source, string expected)
         {
-            AssertOutput(source, _configuration, Context.Empty, expected);
+            return AssertOutput(source, _configuration, Context.Empty, expected);
         }
 
         private void AssertReturn(string source, DocumentConfiguration configuration, IContext context,

@@ -75,7 +75,7 @@ namespace Cottle
             var parser = Parser.Create(configuration);
 
             return parser.Parse(template, out var statement, out var reports)
-                ? DocumentResult.CreateSuccess(constructor(statement))
+                ? DocumentResult.CreateSuccess(constructor(statement), reports)
                 : DocumentResult.CreateFailure(reports);
         }
     }

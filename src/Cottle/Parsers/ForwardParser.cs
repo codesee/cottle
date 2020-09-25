@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using Cottle.Builtins;
 using Cottle.Parsers.Forward;
 
@@ -16,7 +17,7 @@ namespace Cottle.Parsers
             ["declare"] = new Keyword((ForwardParser p, out Statement c, out IEnumerable<DocumentReport> f) =>
                 p.TryCreateDeclare(out c, out f), true),
             ["define"] = new Keyword((ForwardParser p, out Statement c, out IEnumerable<DocumentReport> f) =>
-                p.TryCreateSet(out c, out f), true),
+                p.TryCreateDefine(out c, out f), true),
             ["dump"] = new Keyword((ForwardParser p, out Statement c, out IEnumerable<DocumentReport> f) =>
                 p.TryCreateDump(out c, out f), true),
             ["echo"] = new Keyword((ForwardParser p, out Statement c, out IEnumerable<DocumentReport> f) =>
@@ -57,12 +58,12 @@ namespace Cottle.Parsers
 
             if (_lexer.Current.Type != LexemType.EndOfFile)
             {
-                reports = CreateReports("end of file");
+                reports = CreateReportsExpected("end of file");
 
                 return false;
             }
 
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -82,7 +83,7 @@ namespace Cottle.Parsers
             } while (_lexer.Current.Type == LexemType.Text);
 
             statement = null;
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -90,6 +91,16 @@ namespace Cottle.Parsers
         private bool TryCreateDeclare(out Statement statement, out IEnumerable<DocumentReport> reports)
         {
             return TryParseAssignment(StoreMode.Local, out statement, out reports);
+        }
+
+        private bool TryCreateDefine(out Statement statement, out IEnumerable<DocumentReport> reports)
+        {
+            var obsoletes = CreateReportsObsolete("keyword \"define\"", "keyword \"declare\"");
+            var result = TryParseAssignment(StoreMode.Global, out statement, out var assignmentReports);
+
+            reports = assignmentReports.Concat(obsoletes);
+
+            return result;
         }
 
         private bool TryCreateDump(out Statement statement, out IEnumerable<DocumentReport> reports)
@@ -160,7 +171,7 @@ namespace Cottle.Parsers
                 empty = Statement.NoOp;
 
             statement = Statement.CreateFor(key, value, source, body, empty);
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -219,7 +230,7 @@ namespace Cottle.Parsers
 
                     default:
                         statement = default;
-                        reports = CreateReports("'elif' or 'else' keyword");
+                        reports = CreateReportsExpected("'elif' or 'else' keyword");
 
                         return false;
                 }
@@ -229,7 +240,7 @@ namespace Cottle.Parsers
                 final = Statement.CreateIf(branches[i].Item1, branches[i].Item2, final);
 
             statement = final;
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -334,14 +345,14 @@ namespace Cottle.Parsers
                 if (arguments != null)
                 {
                     statement = Statement.CreateAssignFunction(name, arguments, mode, Statement.NoOp);
-                    reports = default;
+                    reports = Array.Empty<DocumentReport>();
 
                     return true;
                 }
 
                 // Arguments where not defined, build value assignment
                 statement = Statement.CreateAssignValue(name, mode, Expression.Void);
-                reports = default;
+                reports = Array.Empty<DocumentReport>();
 
                 return true;
             }
@@ -423,14 +434,14 @@ namespace Cottle.Parsers
         {
             if (_lexer.Current.Type != type || _lexer.Current.Value != value)
             {
-                reports = CreateReports(message);
+                reports = CreateReportsExpected(message);
 
                 return false;
             }
 
             _lexer.NextBlock();
 
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -534,7 +545,7 @@ namespace Cottle.Parsers
                         }
 
                         expression = operands.Pop();
-                        reports = default;
+                        reports = Array.Empty<DocumentReport>();
 
                         return true;
                 }
@@ -642,7 +653,7 @@ namespace Cottle.Parsers
                         if (_lexer.Current.Type != LexemType.BlockEnd)
                         {
                             statement = default;
-                            reports = CreateReports("end of block");
+                            reports = CreateReportsExpected("end of block");
 
                             return false;
                         }
@@ -664,7 +675,7 @@ namespace Cottle.Parsers
 
                     default:
                         statement = default;
-                        reports = CreateReports("text or block begin ('{')");
+                        reports = CreateReportsExpected("text or block begin ('{')");
 
                         return false;
                 }
@@ -684,7 +695,7 @@ namespace Cottle.Parsers
                 statement = composite;
             }
 
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
 
             return true;
         }
@@ -694,7 +705,7 @@ namespace Cottle.Parsers
             if (_lexer.Current.Type != LexemType.Colon)
             {
                 statement = default;
-                reports = CreateReports("body separator (':')");
+                reports = CreateReportsExpected("body separator (':')");
 
                 return false;
             }
@@ -725,13 +736,13 @@ namespace Cottle.Parsers
         {
             if (_lexer.Current.Type != LexemType.Symbol)
             {
-                reports = CreateReports("symbol (variable name)");
+                reports = CreateReportsExpected("symbol (variable name)");
                 name = default;
 
                 return false;
             }
 
-            reports = default;
+            reports = Array.Empty<DocumentReport>();
             name = _lexer.Current.Value;
 
             _lexer.NextBlock();
@@ -754,7 +765,7 @@ namespace Cottle.Parsers
                     }
 
                     expression = ForwardParser.BuildInvoke(BuiltinOperators.OperatorNot, notExpression);
-                    reports = default;
+                    reports = Array.Empty<DocumentReport>();
 
                     return true;
 
@@ -824,7 +835,7 @@ namespace Cottle.Parsers
                     var minusLhs = Expression.CreateConstant(0);
 
                     expression = ForwardParser.BuildInvoke(BuiltinOperators.OperatorSub, minusLhs, minusRhs);
-                    reports = default;
+                    reports = Array.Empty<DocumentReport>();
 
                     return true;
 
@@ -847,14 +858,14 @@ namespace Cottle.Parsers
 
                     if (_lexer.Current.Type != LexemType.ParenthesisEnd)
                     {
-                        reports = CreateReports("parenthesis end (')')");
+                        reports = CreateReportsExpected("parenthesis end (')')");
 
                         return false;
                     }
 
                     _lexer.NextBlock();
 
-                    reports = default;
+                    reports = Array.Empty<DocumentReport>();
 
                     return true;
 
@@ -879,7 +890,7 @@ namespace Cottle.Parsers
 
                 default:
                     expression = default;
-                    reports = CreateReports("expression");
+                    reports = CreateReportsExpected("expression");
 
                     return false;
             }
@@ -896,7 +907,7 @@ namespace Cottle.Parsers
 
                         if (_lexer.Current.Type != LexemType.BracketEnd)
                         {
-                            reports = CreateReports("array index end (']')");
+                            reports = CreateReportsExpected("array index end (']')");
 
                             return false;
                         }
@@ -912,7 +923,7 @@ namespace Cottle.Parsers
 
                         if (_lexer.Current.Type != LexemType.Symbol)
                         {
-                            reports = CreateReports("field name");
+                            reports = CreateReportsExpected("field name");
 
                             return false;
                         }
@@ -945,19 +956,27 @@ namespace Cottle.Parsers
                         break;
 
                     default:
-                        reports = default;
+                        reports = Array.Empty<DocumentReport>();
 
                         return true;
                 }
             }
         }
 
-        private IEnumerable<DocumentReport> CreateReports(string expected)
+        private IEnumerable<DocumentReport> CreateReportsExpected(string expected)
         {
             var current = _lexer.Current;
             var message = $"expected {expected}, found {current.Value}";
 
             return new[] { new DocumentReport(DocumentSeverity.Error, current.Offset, current.Length, message) };
+        }
+
+        private IEnumerable<DocumentReport> CreateReportsObsolete(string obsolete, string replacement)
+        {
+            var current = _lexer.Current;
+            var message = $"{obsolete} is obsolete, please replace with {replacement}";
+
+            return new[] { new DocumentReport(DocumentSeverity.Notice, current.Offset, current.Length, message) };
         }
     }
 }
